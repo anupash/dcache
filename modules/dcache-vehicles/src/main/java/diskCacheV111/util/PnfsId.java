@@ -69,10 +69,10 @@ public class PnfsId implements Serializable, Comparable<PnfsId> {
         }
 
         PnfsId other = (PnfsId) o;
-        return Arrays.equals(_a, other._a)
-            && Objects.equals(_domain, other._domain);
-    }
 
+        if (!Arrays.equals(_a, other._a)) return false;
+        return _domain.equals(other._domain);
+    }
     @Override
     public int hashCode() {
         return Arrays.hashCode(_a) ^ ((_domain == null) ? 0 : _domain.hashCode());
