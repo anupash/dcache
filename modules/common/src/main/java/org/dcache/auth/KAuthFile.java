@@ -81,7 +81,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.StringTokenizer;
@@ -976,9 +976,9 @@ public class KAuthFile {
             mappings.get(secureId)+"\n");
             return;
         }
-        for( String secureId : mappings.keySet()) {
-            System.out.println(" SecureId \""+secureId+"\" is mapped to a user "+
-            mappings.get(secureId)+"\n");
+        for (Map.Entry<String, String> entry: mappings.entrySet()) {
+            System.out.println(" SecureId \""+entry.getKey()+"\" is mapped to a user "+
+                    entry.getValue()+"\n");
         }
     }
 
@@ -987,10 +987,10 @@ public class KAuthFile {
         if(theuser == null) {
             throw new IllegalArgumentException("user is not specified");
         }
-        for( String secureId : mappings.keySet()) {
-            String user= mappings.get(secureId);
+        for (Map.Entry<String, String> entry: mappings.entrySet()) {
+            String user= entry.getValue();
             if(theuser.equals(user)) {
-                System.out.println("\""+secureId+"\"");
+                System.out.println("\""+entry.getKey()+"\"");
             }
         }
     }

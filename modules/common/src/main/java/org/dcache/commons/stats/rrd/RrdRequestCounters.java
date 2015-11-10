@@ -173,8 +173,7 @@ public class RrdRequestCounters<T> {
      * @throws IOException
      */
     public void plotGraphs() throws IOException {
-        for(T key:rrdcounters.keySet()) {
-            RRDRequestCounter rrdRequestCounter = rrdcounters.get(key);
+        for (RRDRequestCounter rrdRequestCounter: rrdcounters.values()) {
             logger.debug("plotGraphs(): calling rrdRequestCounter.graph()");
             rrdRequestCounter.graph();
             logger.debug("plotGraphs(): rrdRequestCounter.graph() returned");
@@ -182,7 +181,6 @@ public class RrdRequestCounters<T> {
         logger.debug("plotGraphs(): calling totalRequestCounter.graph()");
         totalRequestCounter.graph();
         logger.debug("plotGraphs(): totalRequestCounter.graph() returned");
-
     }
 
     /**
@@ -252,9 +250,9 @@ public class RrdRequestCounters<T> {
         sb.append(" </h1>\n");
         sb.append("  <table> \n");
         sb.append("  <tr> <td> \n");
-        for(T key:rrdcounters.keySet()) {
+        for (RRDRequestCounter rrdReuestCounter: rrdcounters.values()) {
             sb.append("  <tr> <td> \n");
-            String nextHtml = rrdcounters.get(key).getRrdGraphicsHtmlFileName();
+            String nextHtml = rrdReuestCounter.getRrdGraphicsHtmlFileName();
             sb.append("<a href=\"");
             sb.append(nextHtml);
             sb.append("\">");
