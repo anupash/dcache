@@ -1122,6 +1122,7 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>findbugs-maven-plugin</artifactId>
                 <configuration>
+                    <excludeFilterFile>findbugs-exclude.xml</excludeFilterFile>
                     <omitVisitors>FindDeadLocalStores,UnreadFields,Naming,FindUncalledPrivateMethods</omitVisitors>
                 </configuration>
             </plugin>
@@ -1160,6 +1161,7 @@
                 <artifactId>findbugs-maven-plugin</artifactId>
                 <version>3.0.1</version>
                 <configuration>
+                    <excludeFilterFile>findbugs-exclude.xml</excludeFilterFile>
                     <omitVisitors>FindDeadLocalStores,UnreadFields,Naming,FindUncalledPrivateMethods</omitVisitors>
                 </configuration>
             </plugin>
