@@ -352,4 +352,24 @@
         <Method name="equals" />
         <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE" />
     </Match>
+    <Match>
+        <Class name="org.dcache.srm.v2_2.SrmReleaseFilesRequest" />
+        <Method name="equals" />
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE" />
+    </Match>
+    <Match>
+        <Class name="org.dcache.srm.v2_2.SrmReleaseFilesResponse" />
+        <Method name="equals" />
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE" />
+    </Match>
+    <Match>
+        <Class name="org.dcache.srm.v2_2.SrmReleaseSpaceRequest" />
+        <Method name="equals" />
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE" />
+    </Match>
+    <Match>
+        <Class name="org.dcache.srm.v2_2.SrmReleaseSpaceResponse" />
+        <Method name="equals" />
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE" />
+    </Match>
 </FindBugsFilter>
