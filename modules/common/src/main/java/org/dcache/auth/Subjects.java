@@ -484,6 +484,12 @@ public class Subjects
                 case "origin":
                     principal = new Origin(InetAddresses.forString(value));
                     break;
+                case "oidc":
+                    principal = new OidcSubjectPrincipal(value);
+                    break;
+                case "email":
+                    principal = new EmailAddressPrincipal(value);
+                    break;
                 default:
                     try {
                         Class principalClass = Class.forName(type);

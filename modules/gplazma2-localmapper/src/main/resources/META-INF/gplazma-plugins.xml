@@ -1,0 +1,6 @@
+<plugins>
+    <plugin>
+        <name>localmapper</name>
+        <class>org.dcache.gplazma.mapfile.GplazmaLocalMapperPlugin</class>
+    </plugin>
+</plugins>

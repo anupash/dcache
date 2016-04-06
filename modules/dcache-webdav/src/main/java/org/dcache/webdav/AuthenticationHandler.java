@@ -4,23 +4,23 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.net.InetAddresses;
-
 import diskCacheV111.util.CacheException;
 import diskCacheV111.util.FsPath;
 import diskCacheV111.util.PermissionDeniedCacheException;
-
 import org.dcache.auth.LoginReply;
 import org.dcache.auth.LoginStrategy;
 import org.dcache.auth.Origin;
 import org.dcache.auth.Subjects;
 import org.dcache.auth.LoginNamePrincipal;
 import org.dcache.auth.PasswordCredential;
+import org.dcache.auth.BearerTokenCredential;
 import org.dcache.auth.attributes.HomeDirectory;
 import org.dcache.auth.attributes.LoginAttribute;
+import org.dcache.auth.attributes.Restriction;
+import org.dcache.auth.attributes.Restrictions;
 import org.dcache.auth.attributes.RootDirectory;
 import org.dcache.util.CertificateFactories;
 import org.dcache.util.NetLoggerBuilder;
-
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.slf4j.Logger;
@@ -31,7 +31,6 @@ import javax.security.auth.Subject;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -46,14 +45,10 @@ import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.List;
 
-import org.dcache.auth.attributes.Restriction;
-import org.dcache.auth.attributes.Restrictions;
-
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.collect.Lists.newArrayList;
 import static com.google.common.collect.Lists.reverse;
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import static java.util.Arrays.asList;
 
 public class AuthenticationHandler extends HandlerWrapper {
@@ -221,30 +216,21 @@ public class AuthenticationHandler extends HandlerWrapper {
     }
 
 
+
     private void addPasswordCredentialToSubject(HttpServletRequest request, Subject subject) {
         if (!_isBasicAuthenticationEnabled) {
             return;
         }
 
-        String header = request.getHeader("Authorization");
-        if (header == null) {
-            LOG.trace("No credentials found in Authorization header");
+        AuthInfo info = parseAuthenticationHeader(request);
+        if (info == null) {
             return;
         }
 
-        if (header.length() == 0) {
-            LOG.trace("Credentials in Authorization header are not-null, but are empty");
-            return;
-        }
-
-        int space = header.indexOf(" ");
-        String authScheme = space >= 0 ? header.substring(0, space).toUpperCase() : HttpServletRequest.BASIC_AUTH;
-        String authData = space >= 0 ? header.substring(space + 1) : header;
-
-        switch (authScheme) {
+        switch (info.getScheme()) {
         case HttpServletRequest.BASIC_AUTH:
             try {
-                byte[] bytes = Base64.getDecoder().decode(authData.getBytes(StandardCharsets.US_ASCII));
+                byte[] bytes = Base64.getDecoder().decode(info.getData().getBytes(StandardCharsets.US_ASCII));
                 String credential = new String(bytes, StandardCharsets.UTF_8);
                 int colon = credential.indexOf(":");
                 if (colon >= 0) {
@@ -255,11 +241,20 @@ public class AuthenticationHandler extends HandlerWrapper {
                     subject.getPrincipals().add(new LoginNamePrincipal(credential));
                 }
             } catch (IllegalArgumentException e) {
-                LOG.warn("Authentication Data in the header received is not Base64 encoded {}", header);
+                LOG.warn("Authentication Data in the header received is not Base64 encoded {}",
+                        request.getHeader("Authorization"));
+            }
+            break;
+        case "BEARER":
+            try {
+                subject.getPrivateCredentials().add(new BearerTokenCredential(info.getData()));
+            } catch (IllegalArgumentException e) {
+                LOG.info("Bearer Token in invalid {}",
+                        request.getHeader("Authorization"));
             }
             break;
         default:
-            LOG.trace("Unknown authentication scheme {}", authScheme);
+            LOG.debug("Unknown authentication scheme {}", info.getScheme());
         }
     }
 
@@ -300,5 +295,45 @@ public class AuthenticationHandler extends HandlerWrapper {
 
     public File getUploadPath() {
         return (_uploadPath == null) ? null : new File(_uploadPath.toString());
+    }
+
+
+    private class AuthInfo {
+        private final String _scheme;
+        private final String _data;
+
+        AuthInfo(String scheme, String data)
+        {
+            _scheme = scheme;
+            _data = data;
+        }
+
+        public String getScheme()
+        {
+            return _scheme;
+        }
+
+        public String getData()
+        {
+            return _data;
+        }
+    }
+
+    private AuthInfo parseAuthenticationHeader(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null) {
+            LOG.debug("No credentials found in Authorization header");
+            return null;
+        }
+
+        if (header.length() == 0) {
+            LOG.debug("Credentials in Authorization header are not-null, but are empty");
+            return null;
+        }
+
+        int space = header.indexOf(" ");
+        String authScheme = space >= 0 ? header.substring(0, space).toUpperCase() : HttpServletRequest.BASIC_AUTH;
+        String authData = space >= 0 ? header.substring(space + 1) : header;
+        return new AuthInfo(authScheme, authData);
     }
 }
