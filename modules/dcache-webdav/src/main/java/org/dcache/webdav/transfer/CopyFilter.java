@@ -18,7 +18,8 @@
 package org.dcache.webdav.transfer;
 
 import com.google.common.base.Joiner;
-import eu.emi.security.authn.x509.X509Credential;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InternetDomainName;
 import io.milton.http.Filter;
 import io.milton.http.FilterChain;
 import io.milton.http.Request;
@@ -36,12 +37,14 @@ import javax.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.AccessController;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import diskCacheV111.util.CacheException;
@@ -51,19 +54,22 @@ import diskCacheV111.util.PermissionDeniedCacheException;
 import diskCacheV111.util.PnfsHandler;
 
 import org.dcache.acl.enums.AccessMask;
+import org.dcache.auth.BearerTokenCredential;
 import org.dcache.auth.Subjects;
 import org.dcache.auth.attributes.Restriction;
 import org.dcache.cells.CellStub;
 import org.dcache.namespace.FileAttribute;
 import org.dcache.namespace.FileType;
 import org.dcache.vehicles.FileAttributes;
+import org.dcache.webdav.AuthenticationHandler;
 import org.dcache.webdav.PathMapper;
 import org.dcache.webdav.transfer.RemoteTransferHandler.Direction;
-import org.dcache.webdav.AuthenticationHandler;
 import org.dcache.webdav.transfer.RemoteTransferHandler.TransferType;
 
+import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MINUTES;
-import static org.dcache.namespace.FileAttribute.*;
+import static org.dcache.namespace.FileAttribute.PNFSID;
+import static org.dcache.namespace.FileAttribute.TYPE;
 
 /**
  * The CopyFilter adds support for initiating third-party copies via
@@ -100,6 +106,13 @@ public class CopyFilter implements Filter
 
     private static final String QUERY_KEY_ASKED_TO_DELEGATE = "asked-to-delegate";
     private static final String REQUEST_HEADER_CREDENTIAL = "Credential";
+    private static final String REQUEST_HEADER_AUTHORIZATION = "Authorization";
+    private static final String SCHEME_AUTHORIZATION_BEARER = "BEARER";
+
+    private static ImmutableMap<String,String> CLIENT_IDS;
+    private static ImmutableMap<String,String> CLIENT_SECRETS;
+    private static Set<String> OPENID_PROVIDERS;
+
     private static final Set<AccessMask> READ_ACCESS_MASK =
             EnumSet.of(AccessMask.READ_DATA);
     private static final Set<AccessMask> WRITE_ACCESS_MASK =
@@ -113,6 +126,9 @@ public class CopyFilter implements Filter
     public enum CredentialSource {
         /* Get it from an SRM's GridSite credential store */
         GRIDSITE("gridsite"),
+
+        /* OpenID Connect Bearer Token */
+        OIDC("oidc"),
 
         /* Don't get a credential */
         NONE("none");
@@ -130,6 +146,7 @@ public class CopyFilter implements Filter
 
         public static CredentialSource forHeaderValue(String value)
         {
+            _log.debug("Source for Header {}", SOURCE_FOR_HEADER.get(value));
             return SOURCE_FOR_HEADER.get(value);
         }
 
@@ -176,6 +193,27 @@ public class CopyFilter implements Filter
     public void setRemoteTransferHandler(RemoteTransferHandler handler)
     {
         _remoteTransfers = handler;
+    }
+
+    public void setOidClientIds(ImmutableMap<String,String> clientIds)
+    {
+        CLIENT_IDS = clientIds;
+    }
+
+    public void setOidClientSecrets(ImmutableMap<String,String> clientSecrets)
+    {
+        CLIENT_SECRETS = clientSecrets;
+    }
+
+    public void setOidProviders(String providers)
+    {
+        Map<Boolean, Set<String>> validHosts =  Arrays.stream(providers.split("\\s+"))
+                                                      .filter(not(String::isEmpty))
+                                                      .collect(
+                                                            Collectors.groupingBy(InternetDomainName::isValid,
+                                                                    Collectors.toSet())
+                                                      );
+        OPENID_PROVIDERS = validHosts.get(Boolean.TRUE);
     }
 
     @Override
@@ -274,13 +312,14 @@ public class CopyFilter implements Filter
         checkPath(path, direction);
 
         CredentialSource source = getCredentialSource(request, type);
-        X509Credential credential = fetchCredential(source);
-        if (credential == null && source != CredentialSource.NONE) {
+        Object credential = fetchCredential(source);
+        if (credential == null && source == CredentialSource.GRIDSITE) {
             redirectWithDelegation(response);
         } else {
             _remoteTransfers.acceptRequest(response.getOutputStream(),
                     request.getHeaders(), getSubject(), getRestriction(), path,
                     remote, credential, direction);
+
         }
     }
 
@@ -288,10 +327,15 @@ public class CopyFilter implements Filter
             throws ErrorResponseException
     {
         String headerValue = request.getHeaders().get(REQUEST_HEADER_CREDENTIAL);
+        CredentialSource source;
 
-        CredentialSource source = headerValue != null ?
-                CredentialSource.forHeaderValue(headerValue) :
-                type.getDefaultCredentialSource();
+        if (headerValue != null) {
+            source = CredentialSource.forHeaderValue(headerValue);
+        } else if (isAuthorizationHeaderBearer(request)) {
+            source = CredentialSource.OIDC;
+        } else {
+            source = type.getDefaultCredentialSource();
+        }
 
         if (source == null) {
             throw new ErrorResponseException(Status.SC_BAD_REQUEST,
@@ -309,12 +353,12 @@ public class CopyFilter implements Filter
         return source;
     }
 
-    private X509Credential fetchCredential(CredentialSource source)
+    private Object fetchCredential(CredentialSource source)
             throws InterruptedException, ErrorResponseException
     {
+        Subject subject = Subject.getSubject(AccessController.getContext());
         switch (source) {
-        case GRIDSITE:
-            Subject subject = Subject.getSubject(AccessController.getContext());
+            case GRIDSITE:
             String dn = Subjects.getDn(subject);
             if (dn == null) {
                 throw new ErrorResponseException(Response.Status.SC_UNAUTHORIZED,
@@ -325,6 +369,25 @@ public class CopyFilter implements Filter
                     dn, Objects.toString(Subjects.getPrimaryFqan(subject), null),
                     20, MINUTES);
 
+        case OIDC:
+            requireNonNull(CLIENT_IDS, "Client Ids not provided for registered OpenID clients");
+            requireNonNull(CLIENT_SECRETS, "Client Secrets not provided for registered OpenID clients");
+            requireNonNull(OPENID_PROVIDERS, "No OpenId Provider");
+
+            BearerTokenCredential bearer = subject.getPrivateCredentials()
+                                                  .stream()
+                                                  .filter(BearerTokenCredential.class::isInstance)
+                                                  .map(BearerTokenCredential.class::cast)
+                                                  .findFirst()
+                                                  .orElseThrow(() ->
+                                                      new ErrorResponseException(Status.SC_UNAUTHORIZED,
+                                                              "User must authenticate with OpenID for " +
+                                                                      "OpenID delegation"));
+
+            return _credentialService.getDelegatedCredential(bearer.getToken(),
+                                                             CLIENT_IDS,
+                                                             CLIENT_SECRETS,
+                                                             OPENID_PROVIDERS);
         case NONE:
             return null;
 
@@ -490,5 +553,21 @@ public class CopyFilter implements Filter
     {
         HttpServletRequest servletRequest = ServletRequest.getRequest();
         return (Restriction) servletRequest.getAttribute(AuthenticationHandler.DCACHE_RESTRICTION_ATTRIBUTE);
+    }
+
+    private boolean isAuthorizationHeaderBearer (Request request)
+    {
+        String header = request.getHeaders().get(REQUEST_HEADER_AUTHORIZATION);
+        if (header != null && header.length() > 0) {
+            int space = header.indexOf(" ");
+            return (space > 0 && header.substring(0, space).toUpperCase().equals(SCHEME_AUTHORIZATION_BEARER))
+                    ? true : false;
+        } else {
+            return false;
+        }
+    }
+
+    private static <T> Predicate<T> not(Predicate<T> t) {
+        return t.negate();
     }
 }

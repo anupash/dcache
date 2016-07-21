@@ -59,10 +59,12 @@ import diskCacheV111.vehicles.transferManager.TransferStatusQueryMessage;
 
 import dmg.cells.nucleus.CellMessageReceiver;
 
+import org.dcache.auth.OpenIdCredential;
 import org.dcache.auth.attributes.Restriction;
 import org.dcache.cells.CellStub;
 import org.dcache.webdav.transfer.CopyFilter.CredentialSource;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.dcache.util.ByteUnit.MiB;
 import static org.dcache.webdav.transfer.CopyFilter.CredentialSource.*;
@@ -123,8 +125,8 @@ public class RemoteTransferHandler implements CellMessageReceiver
      */
     public enum TransferType {
         GSIFTP("gsiftp", 2811, GRIDSITE, EnumSet.noneOf(CredentialSource.class)),
-        HTTP(    "http",   80,     NONE, EnumSet.noneOf(CredentialSource.class)),
-        HTTPS(  "https",  443, GRIDSITE, EnumSet.of(NONE));
+        HTTP(  "http",   80,     NONE,   EnumSet.noneOf(CredentialSource.class)),
+        HTTPS( "https",  443,  GRIDSITE, EnumSet.of(OIDC));
 
         private static final ImmutableMap<String,TransferType> BY_SCHEME =
             ImmutableMap.of("gsiftp", GSIFTP, "http", HTTP, "https", HTTPS);
@@ -224,9 +226,11 @@ public class RemoteTransferHandler implements CellMessageReceiver
 
     public void acceptRequest(OutputStream out, Map<String,String> requestHeaders,
             Subject subject, Restriction restriction, FsPath path, URI remote,
-            X509Credential credential, Direction direction)
+            Object credential, Direction direction)
             throws ErrorResponseException, InterruptedException
     {
+        checkArgument(credential instanceof X509Credential || credential instanceof OpenIdCredential,
+                                            "Wrong Credential");
         EnumSet<TransferFlag> flags = EnumSet.noneOf(TransferFlag.class);
         flags = addVerificationFlag(flags, requestHeaders);
         ImmutableMap<String,String> transferHeaders = buildTransferHeaders(requestHeaders);
@@ -337,6 +341,9 @@ public class RemoteTransferHandler implements CellMessageReceiver
         private final PrivateKey _privateKey;
         @Nullable
         private final X509Certificate[] _certificateChain;
+        @Nullable
+        private final OpenIdCredential _oidCredential;
+        private final CredentialSource _source;
         private final PrintWriter _out;
         private final EnumSet<TransferFlag> _flags;
         private final ImmutableMap<String,String> _transferHeaders;
@@ -348,7 +355,7 @@ public class RemoteTransferHandler implements CellMessageReceiver
         private boolean _finished;
 
         public RemoteTransfer(OutputStream out, Subject subject, Restriction restriction,
-                FsPath path, URI destination, @Nullable X509Credential credential,
+                FsPath path, URI destination, @Nullable Object credential,
                 EnumSet<TransferFlag> flags, ImmutableMap<String,String> transferHeaders,
                 Direction direction)
                 throws ErrorResponseException
@@ -358,12 +365,21 @@ public class RemoteTransferHandler implements CellMessageReceiver
             _path = path;
             _destination = destination;
             _type = TransferType.fromScheme(destination.getScheme());
-            if (credential != null) {
-                _privateKey = credential.getKey();
-                _certificateChain = credential.getCertificateChain();
+            if (credential instanceof X509Credential) {
+                _privateKey = ((X509Credential)credential).getKey();
+                _certificateChain = ((X509Credential)credential).getCertificateChain();
+                _source = CredentialSource.GRIDSITE;
+                _oidCredential = null;
+            } else if (credential instanceof OpenIdCredential) {
+                _privateKey = null;
+                _certificateChain = null;
+                _source = CredentialSource.OIDC;
+                _oidCredential = (OpenIdCredential) credential;
             } else {
                 _privateKey = null;
                 _certificateChain = null;
+                _source = null;
+                _oidCredential = null;
             }
             _out = new PrintWriter(out);
             _flags = flags;
@@ -380,7 +396,6 @@ public class RemoteTransferHandler implements CellMessageReceiver
 
             message.setSubject(_subject);
             message.setRestriction(_restriction);
-
             try {
                 _id = _transferManager.sendAndWait(message).getId();
                 return _id;
@@ -445,10 +460,17 @@ public class RemoteTransferHandler implements CellMessageReceiver
                         _transferHeaders);
 
             case HTTPS:
-                return new RemoteHttpsDataTransferProtocolInfo("RemoteHttpsDataTransfer",
-                        1, 1, address, _destination.toASCIIString(),
-                        _flags.contains(TransferFlag.REQUIRE_VERIFICATION),
-                        _transferHeaders, _privateKey, _certificateChain);
+                if (_source != CredentialSource.OIDC) {
+                    return new RemoteHttpsDataTransferProtocolInfo("RemoteHttpsDataTransfer",
+                            1, 1, address, _destination.toASCIIString(),
+                            _flags.contains(TransferFlag.REQUIRE_VERIFICATION),
+                            _transferHeaders, _privateKey, _certificateChain);
+                } else {
+                    return new RemoteHttpsDataTransferProtocolInfo("RemoteHttpsDataTransfer",
+                            1, 1, address, _destination.toASCIIString(),
+                            _flags.contains(TransferFlag.REQUIRE_VERIFICATION),
+                            _transferHeaders, _oidCredential);
+                }
             }
 
             throw new RuntimeException("Unexpected TransferType: " + _type);
