@@ -35,8 +35,8 @@ import diskCacheV111.vehicles.RemoteHttpDataTransferProtocolInfo;
 
 import dmg.cells.nucleus.CellEndpoint;
 
-import org.dcache.auth.BearerToken;
 import org.dcache.auth.OpenIdCredential;
+import org.dcache.auth.StaticOpenIdCredential;
 import org.dcache.auth.OpenIdCredentialDecorator;
 import org.dcache.pool.movers.MoverChannel.AllocatorMode;
 import org.dcache.pool.repository.Allocator;
@@ -584,8 +584,8 @@ public class RemoteHttpDataTransferProtocol implements MoverProtocol,
         }
     }
 
-    private BearerToken decorateTokenCredential(BearerToken credential) {
-        if (credential instanceof OpenIdCredential) {
+    private OpenIdCredential decorateTokenCredential(OpenIdCredential credential) {
+        if (credential instanceof StaticOpenIdCredential) {
             return new OpenIdCredentialDecorator(credential, _client);
         } else {
             return credential;

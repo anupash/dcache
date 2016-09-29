@@ -61,8 +61,8 @@ import dmg.cells.nucleus.CellMessageReceiver;
 import dmg.cells.nucleus.CellPath;
 
 import org.dcache.auth.OpenIdClientSecret;
-import org.dcache.auth.OpenIdCredential;
-import org.dcache.auth.OpenIdCredential.OidCredentialBuilder;
+import org.dcache.auth.StaticOpenIdCredential;
+import org.dcache.auth.StaticOpenIdCredential.OidCredentialBuilder;
 import org.dcache.cells.CellStub;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -139,8 +139,8 @@ public class CredentialServiceClient
         return bestRemainingLifetime < units.toMillis(minimumValidity) ? null : bestCredential;
     }
 
-    public OpenIdCredential getDelegatedCredential(String token, ImmutableMap<String, String> clientIds,
-                                                   ImmutableMap<String, String> clientSecrets, Set<String> hosts)
+    public StaticOpenIdCredential getDelegatedCredential(String token, ImmutableMap<String, String> clientIds,
+                                                         ImmutableMap<String, String> clientSecrets, Set<String> hosts)
             throws InterruptedException, ErrorResponseException
     {
         for (String host: hosts)

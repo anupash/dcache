@@ -24,24 +24,24 @@ import java.util.List;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class OpenIdCredentialDecorator implements BearerToken
+public class OpenIdCredentialDecorator implements OpenIdCredential
 {
-    private final OpenIdCredential credential;
+    private final StaticOpenIdCredential credential;
     private final HttpClient client;
     private static final Logger LOG = LoggerFactory.getLogger(OpenIdCredentialDecorator.class);
 
-    public OpenIdCredentialDecorator(BearerToken credential, HttpClient client)
+    public OpenIdCredentialDecorator(OpenIdCredential credential, HttpClient client)
     {
-        checkArgument(credential instanceof OpenIdCredential, "Credential not of type OpenIdCredential");
+        checkArgument(credential instanceof StaticOpenIdCredential, "Credential not of type StaticOpenIdCredential");
         this.client = checkNotNull(client, "Http Client can't be null");
-        this.credential = (OpenIdCredential)credential;
+        this.credential = (StaticOpenIdCredential)credential;
     }
 
-    public OpenIdCredentialDecorator(BearerToken credential)
+    public OpenIdCredentialDecorator(OpenIdCredential credential)
     {
-        checkArgument(credential instanceof OpenIdCredential, "Credential not of type OpenIdCredential");
+        checkArgument(credential instanceof StaticOpenIdCredential, "Credential not of type StaticOpenIdCredential");
         this.client = HttpClientBuilder.create().build();
-        this.credential = (OpenIdCredential)credential;
+        this.credential = (StaticOpenIdCredential)credential;
     }
 
     @Override

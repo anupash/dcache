@@ -59,7 +59,7 @@ import diskCacheV111.vehicles.transferManager.TransferStatusQueryMessage;
 
 import dmg.cells.nucleus.CellMessageReceiver;
 
-import org.dcache.auth.OpenIdCredential;
+import org.dcache.auth.StaticOpenIdCredential;
 import org.dcache.auth.attributes.Restriction;
 import org.dcache.cells.CellStub;
 import org.dcache.webdav.transfer.CopyFilter.CredentialSource;
@@ -229,7 +229,7 @@ public class RemoteTransferHandler implements CellMessageReceiver
             Object credential, Direction direction)
             throws ErrorResponseException, InterruptedException
     {
-        checkArgument(credential instanceof X509Credential || credential instanceof OpenIdCredential,
+        checkArgument(credential instanceof X509Credential || credential instanceof StaticOpenIdCredential,
                                             "Wrong Credential");
         EnumSet<TransferFlag> flags = EnumSet.noneOf(TransferFlag.class);
         flags = addVerificationFlag(flags, requestHeaders);
@@ -342,7 +342,7 @@ public class RemoteTransferHandler implements CellMessageReceiver
         @Nullable
         private final X509Certificate[] _certificateChain;
         @Nullable
-        private final OpenIdCredential _oidCredential;
+        private final StaticOpenIdCredential _oidCredential;
         private final CredentialSource _source;
         private final PrintWriter _out;
         private final EnumSet<TransferFlag> _flags;
@@ -370,11 +370,11 @@ public class RemoteTransferHandler implements CellMessageReceiver
                 _certificateChain = ((X509Credential)credential).getCertificateChain();
                 _source = CredentialSource.GRIDSITE;
                 _oidCredential = null;
-            } else if (credential instanceof OpenIdCredential) {
+            } else if (credential instanceof StaticOpenIdCredential) {
                 _privateKey = null;
                 _certificateChain = null;
                 _source = CredentialSource.OIDC;
-                _oidCredential = (OpenIdCredential) credential;
+                _oidCredential = (StaticOpenIdCredential) credential;
             } else {
                 _privateKey = null;
                 _certificateChain = null;

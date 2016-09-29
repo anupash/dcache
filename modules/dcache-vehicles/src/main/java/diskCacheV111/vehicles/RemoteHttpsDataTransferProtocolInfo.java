@@ -7,7 +7,6 @@ import java.net.InetSocketAddress;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 
-import org.dcache.auth.BearerToken;
 import org.dcache.auth.OpenIdCredential;
 
 /**
@@ -43,7 +42,7 @@ public class RemoteHttpsDataTransferProtocolInfo extends RemoteHttpDataTransferP
     public RemoteHttpsDataTransferProtocolInfo(String protocol, int major,
                                                int minor, InetSocketAddress addr, String url,
                                                boolean isVerificationRequired, ImmutableMap<String,String> headers,
-                                               BearerToken token)
+                                               OpenIdCredential token)
     {
         super(protocol, major, minor, addr, url, isVerificationRequired, headers, token);
         key = null;
