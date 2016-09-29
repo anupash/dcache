@@ -9,9 +9,9 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.auth.BasicScheme;
-import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.protocol.BasicHttpContext;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,39 +21,35 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class OpenIdCredentialDecorator implements OpenIdCredential
+public class OpenIdCredentialRefreshable extends WrappingOpenIdCredential
 {
-    private final StaticOpenIdCredential credential;
     private final HttpClient client;
-    private static final Logger LOG = LoggerFactory.getLogger(OpenIdCredentialDecorator.class);
+    private static final Logger LOG =
+            LoggerFactory.getLogger(OpenIdCredentialRefreshable.class);
 
-    public OpenIdCredentialDecorator(OpenIdCredential credential, HttpClient client)
-    {
-        checkArgument(credential instanceof StaticOpenIdCredential, "Credential not of type StaticOpenIdCredential");
+    public OpenIdCredentialRefreshable(OpenIdCredential credential, HttpClient client) {
+        super(credential);
         this.client = checkNotNull(client, "Http Client can't be null");
-        this.credential = (StaticOpenIdCredential)credential;
-    }
-
-    public OpenIdCredentialDecorator(OpenIdCredential credential)
-    {
-        checkArgument(credential instanceof StaticOpenIdCredential, "Credential not of type StaticOpenIdCredential");
-        this.client = HttpClientBuilder.create().build();
-        this.credential = (StaticOpenIdCredential)credential;
     }
 
     @Override
     public String getBearerToken()
     {
-        if (credential.timeToRefresh()) {
-            refreshOpenIdCredentials();
+        if (timeToRefresh()) {
+            try {
+                refreshOpenIdCredentials();
+            } catch (IOException | AuthenticationException e) {
+                LOG.warn("Error Refreshing OpenId Bearer Token with {}: {}",
+                        credential.getOpenidProvider(), e.getMessage());
+            }
         }
         return credential.getBearerToken();
     }
 
-    private synchronized void refreshOpenIdCredentials() {
+    private synchronized void refreshOpenIdCredentials() throws IOException, AuthenticationException
+    {
         HttpPost post = new HttpPost(credential.getOpenidProvider());
         BasicScheme scheme = new BasicScheme(Charsets.UTF_8);
         UsernamePasswordCredentials clientCreds = new UsernamePasswordCredentials(
@@ -66,16 +62,24 @@ public class OpenIdCredentialDecorator implements OpenIdCredential
         params.add(new BasicNameValuePair("grant_type", "refresh_token"));
         params.add(new BasicNameValuePair("refresh_token", credential.getRefreshToken()));
         params.add(new BasicNameValuePair("scope", credential.getScope()));
-        try {
-            post.setEntity(new UrlEncodedFormEntity(params));
-            post.addHeader(scheme.authenticate(clientCreds, post, new BasicHttpContext()) );
+        post.setEntity(new UrlEncodedFormEntity(params));
+        post.addHeader(scheme.authenticate(clientCreds, post, new BasicHttpContext()) );
 
-            HttpResponse response = client.execute(post);
-            if (response.getStatusLine().getStatusCode() == 200) {
-                updateCredential(parseResponseToJson(response));
-            }
-        } catch (IOException | AuthenticationException e) {
-            e.printStackTrace();
+        HttpResponse response = client.execute(post);
+        if (response.getStatusLine().getStatusCode() == 200) {
+            updateCredential(parseResponseToJson(response));
+        } else {
+            throw new IOException(String.format("Error Refreshing OpenId Bearer Token [%s]: %s",
+                                                    response.getStatusLine().getStatusCode(),
+                                                    credential.getOpenidProvider()));
+        }
+    }
+
+    public boolean timeToRefresh() {
+        if((credential.getExpiresAt() - 60*1000L) > System.currentTimeMillis()) {
+            return false;
+        } else {
+            return true;
         }
     }
 
@@ -86,9 +90,15 @@ public class OpenIdCredentialDecorator implements OpenIdCredential
         return new JSONObject(new String(os.toByteArray(), Charsets.UTF_8));
     }
 
-    private void updateCredential(JSONObject json)
+    private void updateCredential(JSONObject json) throws IOException
     {
-        credential.setAccessToken(json.getString("access_token"));
-        credential.setExpiresAt(System.currentTimeMillis() + (json.getLong("expires_in") - 60)*1000L);
+        try {
+            this.credential = StaticOpenIdCredential.copyOf(credential)
+                                                    .accessToken(json.getString("access_token"))
+                                                    .expiry(json.getLong("expires_in"))
+                                                    .build();
+        } catch (JSONException je) {
+            throw new IOException("Error Parsing response of OpenId Bearer Token Refresh: " + je.getMessage());
+        }
     }
 }

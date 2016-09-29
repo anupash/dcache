@@ -16,6 +16,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.dcache.auth.OpenIdCredentialRefreshable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +38,6 @@ import dmg.cells.nucleus.CellEndpoint;
 
 import org.dcache.auth.OpenIdCredential;
 import org.dcache.auth.StaticOpenIdCredential;
-import org.dcache.auth.OpenIdCredentialDecorator;
 import org.dcache.pool.movers.MoverChannel.AllocatorMode;
 import org.dcache.pool.repository.Allocator;
 import org.dcache.pool.repository.RepositoryChannel;
@@ -572,24 +572,25 @@ public class RemoteHttpDataTransferProtocol implements MoverProtocol,
         return delete;
     }
 
-    private void addHeadersToRequest(RemoteHttpDataTransferProtocolInfo info, HttpRequest request) {
+    private void addHeadersToRequest(RemoteHttpDataTransferProtocolInfo info,
+                                    HttpRequest request)
+    {
         info.getHeaders().forEach(request::addHeader);
         addBearerTokenToRequest(info, request);
     }
 
-    private void addBearerTokenToRequest(RemoteHttpDataTransferProtocolInfo info, HttpRequest request) {
+    private void addBearerTokenToRequest(RemoteHttpDataTransferProtocolInfo info,
+                                         HttpRequest request)
+    {
         if (info.hasTokenCredential()) {
             request.addHeader("Authorization",
                     AUTH_BEARER + decorateTokenCredential(info.getTokenCredential()).getBearerToken());
         }
     }
 
-    private OpenIdCredential decorateTokenCredential(OpenIdCredential credential) {
-        if (credential instanceof StaticOpenIdCredential) {
-            return new OpenIdCredentialDecorator(credential, _client);
-        } else {
-            return credential;
-        }
+    private OpenIdCredential decorateTokenCredential(OpenIdCredential credential)
+    {
+        return new OpenIdCredentialRefreshable(credential, _client);
     }
 
     @Override

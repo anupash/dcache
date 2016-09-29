@@ -12,8 +12,8 @@ public class StaticOpenIdCredential implements OpenIdCredential, Serializable
     private static final Logger LOG =
             LoggerFactory.getLogger(StaticOpenIdCredential.class);
 
-    private String accessToken;
-    private long expiresAt;
+    private final String accessToken;
+    private final long expiresAt;
     private final String issuedTokenType;
     private final String refreshToken;
     private final String scope;
@@ -23,9 +23,9 @@ public class StaticOpenIdCredential implements OpenIdCredential, Serializable
     private final OpenIdClientSecret clientCredential;
     private final String openidProvider;
 
-    private StaticOpenIdCredential(OidCredentialBuilder builder) {
+    private StaticOpenIdCredential(Builder builder) {
         this.accessToken = builder._accessToken;
-        this.expiresAt = System.currentTimeMillis() + (builder._expiresIn - 60)*1000L;
+        this.expiresAt = builder._expiresAt;
         this.issuedTokenType = builder._issuedTokenType;
         this.refreshToken = builder._refreshToken;
         this.scope = builder._scope;
@@ -34,42 +34,42 @@ public class StaticOpenIdCredential implements OpenIdCredential, Serializable
         this.openidProvider = builder._urlOpenidProvider;
     }
 
-    public void setAccessToken(String accessToken) {
-        this.accessToken = accessToken;
-    }
-
-    public void setExpiresAt(long expiresAt) {
-        this.expiresAt = expiresAt;
-    }
-
+    @Override
     public String getAccessToken() {
         return accessToken;
     }
 
+    @Override
     public long getExpiresAt() {
         return expiresAt;
     }
 
+    @Override
     public String getIssuedTokenType() {
         return issuedTokenType;
     }
 
+    @Override
     public String getRefreshToken() {
         return refreshToken;
     }
 
+    @Override
     public String getScope() {
         return scope;
     }
 
+    @Override
     public String getTokenType() {
         return tokenType;
     }
 
+    @Override
     public OpenIdClientSecret getClientCredential() {
         return clientCredential;
     }
 
+    @Override
     public String getOpenidProvider() {
         return openidProvider;
     }
@@ -77,14 +77,6 @@ public class StaticOpenIdCredential implements OpenIdCredential, Serializable
     @Override
     public String getBearerToken() {
         return getAccessToken();
-    }
-
-    public boolean timeToRefresh() {
-        if(this.expiresAt > System.currentTimeMillis()) {
-            return false;
-        } else {
-            return true;
-        }
     }
 
     @Override
@@ -126,10 +118,22 @@ public class StaticOpenIdCredential implements OpenIdCredential, Serializable
                             clientCredential, openidProvider);
     }
 
-    public static class OidCredentialBuilder
+    public static Builder copyOf(OpenIdCredential credential)
+    {
+        return new Builder().accessToken(credential.getAccessToken())
+                            .expiry(credential.getExpiresAt())
+                            .refreshToken(credential.getRefreshToken())
+                            .issuedTokenType(credential.getIssuedTokenType())
+                            .scope(credential.getScope())
+                            .tokenType(credential.getTokenType())
+                            .clientCredential(OpenIdClientSecret.copyOf(credential.getClientCredential()))
+                            .provider(credential.getOpenidProvider());
+    }
+
+    public static class Builder
     {
         private String _accessToken = null;
-        private long _expiresIn = 0L;
+        private long _expiresAt = 0L;
         private String _issuedTokenType = null;
         private String _refreshToken = null;
         private String _scope = null;
@@ -137,48 +141,58 @@ public class StaticOpenIdCredential implements OpenIdCredential, Serializable
         private OpenIdClientSecret _clientCredential = null;
         private String _urlOpenidProvider = null;
 
-        public OidCredentialBuilder(String accessToken)
+        public Builder(String accessToken)
         {
             _accessToken = accessToken;
         }
 
-        public OidCredentialBuilder expiry(long expiresIn)
+        public Builder()
         {
-            this._expiresIn = expiresIn;
+        }
+
+        public Builder accessToken(String accessToken)
+        {
+            this._accessToken = accessToken;
             return this;
         }
 
-        public OidCredentialBuilder refreshToken(String refreshToken)
+        public Builder expiry(long expiresIn)
+        {
+            this._expiresAt = System.currentTimeMillis() + expiresIn*1000L;
+            return this;
+        }
+
+        public Builder refreshToken(String refreshToken)
         {
             this._refreshToken = refreshToken;
             return this;
         }
 
-        public OidCredentialBuilder issuedTokenType(String issuedTokenType)
+        public Builder issuedTokenType(String issuedTokenType)
         {
             this._issuedTokenType = issuedTokenType;
             return this;
         }
 
-        public OidCredentialBuilder scope(String scope)
+        public Builder scope(String scope)
         {
             this._scope = scope;
             return this;
         }
 
-        public OidCredentialBuilder tokenType(String tokenType)
+        public Builder tokenType(String tokenType)
         {
             this._tokenType = tokenType;
             return this;
         }
 
-        public OidCredentialBuilder clientCredential(OpenIdClientSecret clientCredential)
+        public Builder clientCredential(OpenIdClientSecret clientCredential)
         {
             this._clientCredential = clientCredential;
             return this;
         }
 
-        public OidCredentialBuilder provider(String url)
+        public Builder provider(String url)
         {
             this._urlOpenidProvider = url;
             return this;

@@ -62,7 +62,7 @@ import dmg.cells.nucleus.CellPath;
 
 import org.dcache.auth.OpenIdClientSecret;
 import org.dcache.auth.StaticOpenIdCredential;
-import org.dcache.auth.StaticOpenIdCredential.OidCredentialBuilder;
+import org.dcache.auth.StaticOpenIdCredential.Builder;
 import org.dcache.cells.CellStub;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -172,7 +172,7 @@ public class CredentialServiceClient
                     response.getEntity().writeTo(os);
                     JSONObject json = new JSONObject(new String(os.toByteArray(), Charsets.UTF_8));
 
-                    OidCredentialBuilder builder = new OidCredentialBuilder(json.getString("access_token"));
+                    Builder builder = new Builder(json.getString("access_token"));
                     return builder.expiry(json.getLong("expires_in"))
                             .refreshToken(json.getString("refresh_token"))
                             .issuedTokenType(json.getString("issued_token_type"))

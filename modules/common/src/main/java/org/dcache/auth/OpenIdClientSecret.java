@@ -10,7 +10,6 @@ public class OpenIdClientSecret implements Serializable
     private final String secret;
 
     public OpenIdClientSecret(String id, String secret)
-
     {
         this.id = checkNotNull(id);
         this.secret = checkNotNull(secret);
@@ -22,5 +21,9 @@ public class OpenIdClientSecret implements Serializable
 
     public String getSecret() {
         return secret;
+    }
+
+    public static OpenIdClientSecret copyOf(OpenIdClientSecret orig) {
+        return new OpenIdClientSecret(orig.getId(), orig.getSecret());
     }
 }
